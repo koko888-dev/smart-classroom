@@ -1,8 +1,10 @@
 import { readSamples } from "@/src/lib/classroom";
-import type { ClassroomSample } from "@/src/lib/classroom";
+import { selectionFromUrl, sampleLocation, type SchoolSample } from "@/src/lib/school";
 import { subscribe } from "@/src/lib/classroom-events";
 
 export function GET(request: Request) {
+  const selection = selectionFromUrl(request.url);
+  if (!selection) return Response.json({ error: "Invalid selection" }, { status: 400 });
   const encoder = new TextEncoder();
   let stopped = false;
   let unsubscribe = () => {};
@@ -28,22 +30,23 @@ export function GET(request: Request) {
         abort();
         return;
       }
-      const send = (sample: ClassroomSample) => {
+      const send = (sample: SchoolSample) => {
         if (stopped || (lastTime && sample.time <= lastTime)) return;
         controller.enqueue(encoder.encode(`id: ${sample.time}\ndata: ${JSON.stringify(sample)}\n\n`));
         lastTime = sample.time;
       };
       let ready = false;
-      const pending: ClassroomSample[] = [];
+      const pending: SchoolSample[] = [];
       // Subscribe before the initial query so writes during that query cannot be lost.
       unsubscribe = subscribe((sample) => {
+        if (sample.kind !== selection.kind || sampleLocation(sample) !== selection.location) return;
         if (ready) send(sample);
         else pending.push(sample);
       });
       controller.enqueue(encoder.encode("retry: 2000\n\n"));
       const initialize = async () => {
         try {
-          const samples = await readSamples(lastTime);
+          const samples = await readSamples(lastTime, selection.kind, selection.location);
           if (stopped) return;
           for (const sample of [...samples, ...pending].sort((a, b) => a.time.localeCompare(b.time))) send(sample);
           pending.length = 0;

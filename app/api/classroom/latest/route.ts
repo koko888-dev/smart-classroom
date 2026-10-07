@@ -1,23 +1,15 @@
-import { NextResponse } from "next/server";
 import { readSamples } from "@/src/lib/classroom";
+import { selectionFromUrl } from "@/src/lib/school";
 
-
-export async function GET() {
+export async function GET(request: Request) {
+  const selection = selectionFromUrl(request.url);
+  if (!selection) return Response.json({ error: "Invalid selection" }, { status: 400 });
   try {
-    const samples = await readSamples();
-    const result = samples[0] ?? null;
-
-    return NextResponse.json(result, {
-      headers: {
-        "Cache-Control": "no-store, no-cache, must-revalidate",
-      },
-    });
+    const samples = await readSamples(undefined, selection.kind, selection.location);
+    return Response.json(samples[0] ?? null, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error(error);
-
-    return NextResponse.json(
-      { error: "Cannot read data from InfluxDB" },
-      { status: 500 }
-    );
+    return Response.json({ error: "Cannot read latest sample" }, { status: 500 });
   }
 }
+

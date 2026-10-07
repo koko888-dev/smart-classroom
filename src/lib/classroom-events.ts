@@ -1,6 +1,6 @@
-import type { ClassroomSample } from "@/src/lib/classroom";
+import type { SchoolSample } from "@/src/lib/school";
 
-type Listener = (sample: ClassroomSample) => void;
+type Listener = (sample: SchoolSample) => void;
 // Keep subscribers across module reloads in this single local Next.js server.
 const shared = globalThis as typeof globalThis & {
   classroomListeners?: Set<Listener>;
@@ -12,6 +12,6 @@ export function subscribe(listener: Listener) {
   return () => { listeners.delete(listener); };
 }
 
-export function publish(sample: ClassroomSample) {
+export function publish(sample: SchoolSample) {
   for (const listener of listeners) listener(sample);
 }

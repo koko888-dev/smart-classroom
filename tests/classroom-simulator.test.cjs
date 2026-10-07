@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { createSimulator } = require("../scripts/simulator");
+const { createSimulator } = require("../scripts/classroom-simulator");
 
 test("a long classroom session stays within bounds without sudden jumps", () => {
   let seed = 42;

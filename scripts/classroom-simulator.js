@@ -1,6 +1,6 @@
 // A classroom scenario for demos, not a calibrated physical sensor model.
-function createSimulator(random = Math.random) {
-  let state = { temperature: 29, humidity: 68, co2: 900, people: 20 };
+function createSimulator(random = Math.random, initial = {}) {
+  let state = { temperature: 29, humidity: 68, co2: 900, people: 20, ...initial };
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const noise = (size) => (random() * 2 - 1) * size;
 

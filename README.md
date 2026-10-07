@@ -1,54 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# School Monitor
 
-## Classroom simulation
+Local school dashboard with two independent simulators and immediate SSE updates.
 
-Start the app with `npm run dev`, then run `npm run generator` in a second terminal.
+## Run
+
 Configure `INFLUX_URL`, `INFLUX_TOKEN`, `INFLUX_ORG`, and `INFLUX_BUCKET` in `.env.local`.
-The generator targets `http://localhost:3000`; set `CLASSROOM_APP_URL` if the app uses another address.
+Run these in three terminals from this directory:
 
-The simulator produces a sample every five seconds. Environmental values move gradually,
-and occasional entry/exit events change occupancy by 1–3 people. This is a demo scenario,
-not a calibrated physical sensor model. After InfluxDB confirms each write, the generator
-posts that sample to the authenticated publish endpoint, which immediately forwards it
-to connected browsers through SSE. There is no periodic database polling. A browser
-reads stored data when it connects or reconnects, and deduplicates samples by timestamp.
-Failed notifications are retried on the next sample, with up to one hour of pending samples.
-
-The event subscribers live in one local Next.js process. Multiple server instances would
-need a shared message broker. Previously saved random data remains visible until it leaves
-the one-hour history window. Run `npm test` to check simulation continuity and bounds.
-
-## Getting Started
-
-First, run the development server:
-
-```bash
+```powershell
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run generator:classroom
+npm run generator:power
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000. The sidebar selects the classroom or electricity dashboard.
+The location selector chooses a room or building. Stop a generator with Ctrl+C before
+restarting it. Each generator holds an exclusive local port (43101 for classrooms,
+43102 for power) to prevent duplicate runs.
+Stop any older generator process once before using the new version; older versions did
+not acquire the exclusive port.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Data
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Measurement | Tag | Locations | Fields |
+| --- | --- | --- | --- |
+| classroom_environment | room | ENG-301, ENG-302 | temperature, humidity, co2, people |
+| school_power_usage | building | ENG, SCI | power_w, energy_kwh |
 
-## Learn More
+Both generators run every five seconds and retain independent state per location.
+Classroom values move gradually; occupancy changes on simulated entry/exit events.
+Power loads vary gradually. Cumulative energy uses average power over elapsed time:
+`energy_kwh += average_power_w * elapsed_seconds / 3600000`.
+The power generator loads the latest saved energy within 30 days on startup, so normal
+restarts continue the existing meter instead of resetting it. Simulation is a demo model,
+not a calibrated physical device.
 
-To learn more about Next.js, take a look at the following resources:
+Each generator writes its two points as a batch, waits for InfluxDB confirmation, then
+posts the samples to `/api/school/publish`. The endpoint authenticates using the server
+InfluxDB token, validates the sample, and forwards it to the selected SSE subscribers.
+There is no periodic database polling. The browser reads stored history on connection
+or reconnection and deduplicates samples by timestamp. Switching dashboards closes the
+previous stream and clears its data before connecting to the new location.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+`CLASSROOM_APP_URL` optionally overrides the publisher target (default localhost:3000).
+Unsent notifications retry on the next cycle, retaining up to 1440 samples per generator.
+Historical data is not deleted. The dashboard shows the last hour.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+API selection example: `/api/school/history?kind=power&location=SCI`.
+The previous `/api/classroom/*` endpoints remain compatible with older commands.
+Event subscribers live in one local Next.js process. A deployment across multiple server
+instances would require a shared message broker.
 
-## Deploy on Vercel
+## Check
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```powershell
+npm test
+npm run lint
+npx tsc --noEmit
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Tests cover simulation continuity, independent location state, watt-to-kWh integration,
+and preventing duplicate generator processes.

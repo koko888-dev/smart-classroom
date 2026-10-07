@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "generator": "node scripts/generator.js",
+    "generator:classroom": "node scripts/classroom-generator.js",
+    "generator:power": "node scripts/power-generator.js",
     "test": "node --test tests/*.test.cjs",
     "build": "next build",
     "start": "next start",
