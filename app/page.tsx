@@ -1,69 +1,207 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useState } from "react";
+
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+
+type LatestData = {
+  time: string;
+  room: string;
+  temperature: number;
+  humidity: number;
+  co2: number;
+  people: number;
+};
+
+type HistoryData = {
+  time: string;
+  temperature?: number;
+  humidity?: number;
+  co2?: number;
+  people?: number;
+};
+
+function formatTime(time: string) {
+  return new Date(time).toLocaleTimeString("th-TH", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
 
 export default function Home() {
+  const [latest, setLatest] = useState<LatestData | null>(null);
+  const [history, setHistory] = useState<HistoryData[]>([]);
+  const [connected, setConnected] = useState(false);
+  const [historyError, setHistoryError] = useState(false);
+
+  useEffect(() => {
+    const abort = new AbortController();
+    const mergeHistory = (existing: HistoryData[], incoming: HistoryData[]) => {
+      const cutoff = Date.now() - 60 * 60 * 1000;
+      // Use the full timestamp as the identity, even when sensor values are equal.
+      const samples = new Map(existing.map((sample) => [sample.time, sample]));
+      for (const sample of incoming) samples.set(sample.time, sample);
+      return Array.from(samples.values())
+        .filter((sample) => Date.parse(sample.time) >= cutoff)
+        .sort((a, b) => a.time.localeCompare(b.time));
+    };
+    const loadHistory = async () => {
+      try {
+        const response = await fetch("/api/classroom/history", {
+          cache: "no-store",
+          signal: abort.signal,
+        });
+        if (!response.ok) throw new Error("Cannot load classroom history");
+        const samples: HistoryData[] = await response.json();
+        if (!abort.signal.aborted) {
+          setHistory((existing) => mergeHistory(existing, samples));
+          setHistoryError(false);
+        }
+      } catch (error) {
+        if (!abort.signal.aborted) {
+          console.error(error);
+          setHistoryError(true);
+        }
+      }
+    };
+    const events = new EventSource("/api/classroom/stream");
+    events.onopen = () => {
+      setConnected(true);
+      // Reload on reconnect to recover history missed during a disconnection.
+      void loadHistory();
+    };
+    events.onmessage = (event) => {
+      const sample: LatestData = JSON.parse(event.data);
+      setLatest((previous) =>
+        !previous || sample.time > previous.time ? sample : previous,
+      );
+      setHistory((existing) => mergeHistory(existing, [sample]));
+    };
+    events.onerror = () => setConnected(false);
+    return () => {
+      abort.abort();
+      events.close();
+    };
+  }, []);
+
+  if (!latest) {
+    return <main>{connected ? "กำลังรอข้อมูลจากเครื่องวัด..." : "กำลังเชื่อมต่อข้อมูลสด..."}</main>;
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="container">
+
+      <h1>{latest.room}</h1>
+
+      <p role="status">
+        {connected ? "เชื่อมต่อข้อมูลสดแล้ว" : "การเชื่อมต่อขาด กำลังเชื่อมต่อใหม่..."}
+        {" · บันทึกล่าสุด: "}{formatTime(latest.time)}
+        {" · สร้างข้อมูลทุก 5 วินาที"}
+      </p>
+      {historyError && <p role="alert">โหลดข้อมูลย้อนหลังไม่สำเร็จ</p>}
+
+      <div className="cards">
+
+        <div className="card">
+          <h2>Temperature</h2>
+          <p>{latest.temperature} °C</p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
+
+        <div className="card">
+          <h2>Humidity</h2>
+          <p>{latest.humidity} %</p>
+        </div>
+
+        <div className="card">
+          <h2>CO₂</h2>
+          <p>{latest.co2} ppm</p>
+        </div>
+
+        <div className="card">
+          <h2>People</h2>
+          <p>{latest.people}</p>
+        </div>
+
+      </div>
+
+      <div className="chart">
+        <h2>Temperature ย้อนหลัง</h2>
+
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={history}>
+
+            <CartesianGrid strokeDasharray="3 3" />
+
+            <XAxis dataKey="time" tickFormatter={formatTime} />
+
+            <YAxis />
+
+            <Tooltip labelFormatter={(label) => formatTime(String(label))} />
+
+            <Line
+              type="monotone"
+              dataKey="temperature"
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="chart">
+        <h2>CO₂ ย้อนหลัง</h2>
+
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={history}>
+
+            <CartesianGrid strokeDasharray="3 3" />
+
+            <XAxis dataKey="time" tickFormatter={formatTime} />
+
+            <YAxis />
+
+            <Tooltip labelFormatter={(label) => formatTime(String(label))} />
+
+            <Line
+              type="monotone"
+              dataKey="co2"
+            />
+
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="chart">
+        <h2>People ย้อนหลัง</h2>
+
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={history}>
+
+            <CartesianGrid strokeDasharray="3 3" />
+
+            <XAxis dataKey="time" tickFormatter={formatTime} />
+
+            <YAxis />
+
+            <Tooltip labelFormatter={(label) => formatTime(String(label))} />
+
+            <Line
+              type="monotone"
+              dataKey="people"
+            />
+
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+    </main>
   );
 }
