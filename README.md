@@ -13,7 +13,8 @@ npm run generator:classroom
 npm run generator:power
 ```
 
-Open http://localhost:3000. The sidebar selects the classroom or electricity dashboard.
+Open http://localhost:3000 (redirects to `/classrooms`). The sidebar links to separate
+pages: `/classrooms` for classroom data and `/power` for electricity data.
 The location selector chooses a room or building. Stop a generator with Ctrl+C before
 restarting it. Each generator holds an exclusive local port (43101 for classrooms,
 43102 for power) to prevent duplicate runs.
@@ -36,7 +37,8 @@ restarts continue the existing meter instead of resetting it. Simulation is a de
 not a calibrated physical device.
 
 Each generator writes its two points as a batch, waits for InfluxDB confirmation, then
-posts the samples to `/api/school/publish`. The endpoint authenticates using the server
+posts the samples to its own publish endpoint: `/api/classroom/publish` or
+`/api/power/publish`. Each endpoint accepts only its system's samples and authenticates using the server
 InfluxDB token, validates the sample, and forwards it to the selected SSE subscribers.
 There is no periodic database polling. The browser reads stored history on connection
 or reconnection and deduplicates samples by timestamp. Switching dashboards closes the
@@ -46,8 +48,16 @@ previous stream and clears its data before connecting to the new location.
 Unsent notifications retry on the next cycle, retaining up to 1440 samples per generator.
 Historical data is not deleted. The dashboard shows the last hour.
 
-API selection example: `/api/school/history?kind=power&location=SCI`.
-The previous `/api/classroom/*` endpoints remain compatible with older commands.
+The classroom page uses `/api/classroom/latest`, `/api/classroom/history`, and
+`/api/classroom/stream` with a `room` query parameter (ENG-301 or ENG-302).
+The power page uses `/api/power/latest`, `/api/power/history`, and `/api/power/stream`
+with a `building` query parameter (ENG or SCI). The shared `/api/school/*` API is removed.
+Examples: `/api/classroom/history?room=ENG-302`, `/api/power/history?building=SCI`.
+Restart both generators after this API change; already-running processes keep their old
+publish address until restarted. Shared UI components render charts and the sidebar, while
+each page owns its own location selector. Every route contains its own query, validation,
+or SSE logic. Only the InfluxDB connection and the event subscriber registry are shared
+between APIs; types and dashboard configuration remain in `src/lib/school.ts`.
 Event subscribers live in one local Next.js process. A deployment across multiple server
 instances would require a shared message broker.
 

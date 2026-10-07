@@ -1,7 +1,7 @@
 const { Point } = require("@influxdata/influxdb-client");
 const { createPowerSimulator } = require("./power-simulator");
 const { createWriter, runGenerator } = require("./generator-runtime");
-const writer = createWriter();
+const writer = createWriter("power");
 let buildings;
 async function initialize() {
   buildings = await Promise.all([

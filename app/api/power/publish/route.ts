@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { publish } from "@/src/lib/school-events";
-import type { ClassroomSample } from "@/src/lib/school";
+import type { PowerSample } from "@/src/lib/school";
 
 export async function POST(request: Request) {
   const token = process.env.INFLUX_TOKEN;
@@ -20,24 +20,22 @@ export async function POST(request: Request) {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     return Response.json({ error: "Invalid sample" }, { status: 400 });
   }
-  if (data.kind !== "classroom") {
+  if (data.kind !== "power") {
     return Response.json({ error: "Invalid system" }, { status: 400 });
   }
   if (typeof data.time !== "string" || Number.isNaN(Date.parse(data.time)) ||
-      !(["ENG-301","ENG-302"] as readonly unknown[]).includes(data.room) ||
-      ![data.temperature, data.humidity, data.co2, data.people].every(value => typeof value === "number" && Number.isFinite(value)) ||
-      !Number.isInteger(data.people) || Number(data.people) < 0 || Number(data.people) > 50) {
-    return Response.json({ error: "Invalid classroom sample" }, { status: 400 });
+      !(["ENG","SCI"] as readonly unknown[]).includes(data.building) ||
+      ![data.power_w, data.energy_kwh].every(value => typeof value === "number" && Number.isFinite(value)) ||
+      Number(data.power_w) < 0 || Number(data.energy_kwh) < 0) {
+    return Response.json({ error: "Invalid power sample" }, { status: 400 });
   }
 
-  const sample: ClassroomSample = {
-    kind: "classroom",
+  const sample: PowerSample = {
+    kind: "power",
     time: new Date(data.time).toISOString(),
-    room: String(data.room),
-    temperature: Number(data.temperature),
-    humidity: Number(data.humidity),
-    co2: Number(data.co2),
-    people: Number(data.people),
+    building: String(data.building),
+    power_w: Number(data.power_w),
+    energy_kwh: Number(data.energy_kwh),
   };
   publish(sample);
   return Response.json({ ok: true });

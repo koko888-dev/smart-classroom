@@ -3,12 +3,13 @@ const net = require("net");
 require("dotenv").config({ path: path.resolve(__dirname, "../.env.local"), quiet: true });
 const { InfluxDB } = require("@influxdata/influxdb-client");
 
-function createWriter() {
+function createWriter(kind) {
+  if (kind !== "classroom" && kind !== "power") throw new Error("Invalid generator kind");
   const token = process.env.INFLUX_TOKEN;
   const db = new InfluxDB({ url: process.env.INFLUX_URL, token });
   const writeApi = db.getWriteApi(process.env.INFLUX_ORG, process.env.INFLUX_BUCKET, "ns", { flushInterval: 0 });
   const queryApi = db.getQueryApi(process.env.INFLUX_ORG);
-  const publishUrl = new URL("/api/school/publish", process.env.CLASSROOM_APP_URL || "http://localhost:3000");
+  const publishUrl = new URL(`/api/${kind}/publish`, process.env.CLASSROOM_APP_URL || "http://localhost:3000");
   const pending = [];
   return {
     writeApi,

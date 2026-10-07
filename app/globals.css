@@ -3,6 +3,8 @@
 body { margin: 0; background: #f5f7fa; color: var(--ink); font-family: Arial, sans-serif; }
 button, select { font: inherit; }
 button { cursor: pointer; }
+button:focus-visible, a:focus-visible { outline: 3px solid #77d4c4; outline-offset: 4px; }
+.nav-item { text-decoration: none; }
 button:focus-visible, select:focus-visible { outline: 3px solid #77d4c4; outline-offset: 4px; }
 .app-shell { display: flex; min-height: 100vh; }
 .sidebar { width: 260px; flex-shrink: 0; background: #13273b; color: #fff; padding: 30px 18px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }

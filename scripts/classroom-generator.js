@@ -1,7 +1,7 @@
 const { Point } = require("@influxdata/influxdb-client");
 const { createSimulator } = require("./classroom-simulator");
 const { createWriter, runGenerator } = require("./generator-runtime");
-const writer = createWriter();
+const writer = createWriter("classroom");
 const rooms = [
   { room: "ENG-301", next: createSimulator() },
   { room: "ENG-302", next: createSimulator(Math.random, { temperature: 28.2, humidity: 65, co2: 820, people: 12 }) },

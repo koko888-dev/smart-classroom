@@ -22,11 +22,3 @@ export function sampleLocation(sample: SchoolSample) {
   return sample.kind === "classroom" ? sample.room : sample.building;
 }
 
-export function selectionFromUrl(url: string): { kind: SystemKind; location: string } | null {
-  const params = new URL(url).searchParams;
-  const kind = params.get("kind") ?? "classroom";
-  if (kind !== "classroom" && kind !== "power") return null;
-  const location = params.get("location") ?? systems[kind].locations[0];
-  if (!(systems[kind].locations as readonly string[]).includes(location)) return null;
-  return { kind, location };
-}

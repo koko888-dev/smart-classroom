@@ -1,13 +1,13 @@
 import { queryApi, bucket } from "@/src/lib/influxdb";
 import { subscribe } from "@/src/lib/school-events";
-import type { ClassroomSample } from "@/src/lib/school";
+import type { PowerSample } from "@/src/lib/school";
 
 export function GET(request: Request) {
   const params = new URL(request.url).searchParams;
-  const room = params.get("room") ?? "ENG-301";
-  if (params.has("kind") || params.has("location") || params.has("building") ||
-      !(["ENG-301","ENG-302"] as readonly string[]).includes(room)) {
-    return Response.json({ error: "Invalid room" }, { status: 400 });
+  const building = params.get("building") ?? "ENG";
+  if (params.has("kind") || params.has("location") || params.has("room") ||
+      !(["ENG","SCI"] as readonly string[]).includes(building)) {
+    return Response.json({ error: "Invalid building" }, { status: 400 });
   }
   const encoder = new TextEncoder();
   let stopped = false;
@@ -34,16 +34,16 @@ export function GET(request: Request) {
       detachAbort = () => request.signal.removeEventListener("abort", abort);
       if (request.signal.aborted) { abort(); return; }
 
-      const send = (sample: ClassroomSample) => {
+      const send = (sample: PowerSample) => {
         if (stopped || (lastTime && sample.time <= lastTime)) return;
         controller.enqueue(encoder.encode(`id: ${sample.time}\ndata: ${JSON.stringify(sample)}\n\n`));
         lastTime = sample.time;
       };
       let ready = false;
-      const pending: ClassroomSample[] = [];
+      const pending: PowerSample[] = [];
       // Subscribe first so a write during the initial query cannot be missed.
       unsubscribe = subscribe((sample) => {
-        if (sample.kind !== "classroom" || sample.room !== room) return;
+        if (sample.kind !== "power" || sample.building !== building) return;
         if (ready) send(sample);
         else pending.push(sample);
       });
@@ -56,31 +56,29 @@ export function GET(request: Request) {
         from(bucket: ${JSON.stringify(bucket)})
           |> range(start: ${lastTime ? `time(v: ${JSON.stringify(lastTime)})` : "-1h"})
           ${lastTime ? `|> filter(fn: (r) => r._time > time(v: ${JSON.stringify(lastTime)}))` : ""}
-          |> filter(fn: (r) => r._measurement == "classroom_environment" and r.room == ${JSON.stringify(room)})
-          |> filter(fn: (r) => contains(value: r._field, set: ["temperature","humidity","co2","people"]))
+          |> filter(fn: (r) => r._measurement == "school_power_usage" and r.building == ${JSON.stringify(building)})
+          |> filter(fn: (r) => contains(value: r._field, set: ["power_w","energy_kwh"]))
           |> toFloat()
-          |> group(columns: ["room"])
+          |> group(columns: ["building"])
           |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
-          |> filter(fn: (r) => exists r.temperature and exists r.humidity and exists r.co2 and exists r.people)
+          |> filter(fn: (r) => exists r.power_w and exists r.energy_kwh)
           |> sort(columns: ["_time"])
           ${lastTime ? "" : "|> tail(n: 1)"}
           `;
           const rows = await queryApi.collectRows<Record<string, unknown>>(query);
           if (stopped) return;
-          const samples = rows.map((row): ClassroomSample => ({
-            kind: "classroom",
+          const samples = rows.map((row): PowerSample => ({
+            kind: "power",
             time: new Date(String(row._time)).toISOString(),
-            room,
-            temperature: Number(row.temperature),
-            humidity: Number(row.humidity),
-            co2: Number(row.co2),
-            people: Number(row.people),
+            building,
+            power_w: Number(row.power_w),
+            energy_kwh: Number(row.energy_kwh),
           }));
           for (const sample of [...samples, ...pending].sort((a, b) => a.time.localeCompare(b.time))) send(sample);
           pending.length = 0;
           ready = true;
         } catch (error) {
-          console.error("classroom stream failed:", error);
+          console.error("power stream failed:", error);
           if (!stopped) { stop(); controller.error(error); }
         }
       };
