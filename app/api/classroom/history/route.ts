@@ -26,7 +26,7 @@ export async function GET() {
         next(row, tableMeta) {
           const data = tableMeta.toObject(row);
 
-          const time = data._time;
+          const time = new Date(data._time).toISOString();
 
           if (!dataMap.has(time)) {
             dataMap.set(time, {

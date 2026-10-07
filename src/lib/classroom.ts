@@ -27,7 +27,7 @@ export async function readSamples(after?: string): Promise<ClassroomSample[]> {
       ${selection}
   `);
   return rows.map((row) => ({
-    time: row._time,
+    time: new Date(row._time).toISOString(),
     room: row.room,
     temperature: Number(row.temperature),
     humidity: Number(row.humidity),

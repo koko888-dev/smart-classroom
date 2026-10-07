@@ -1,14 +1,19 @@
 import { readSamples } from "@/src/lib/classroom";
+import type { ClassroomSample } from "@/src/lib/classroom";
+import { subscribe } from "@/src/lib/classroom-events";
 
 export function GET(request: Request) {
   const encoder = new TextEncoder();
   let stopped = false;
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let unsubscribe = () => {};
+  let detachAbort = () => {};
   const resume = request.headers.get("last-event-id");
-  let lastTime = resume && !Number.isNaN(Date.parse(resume)) ? resume : undefined;
+  let lastTime = resume && !Number.isNaN(Date.parse(resume))
+    ? new Date(resume).toISOString() : undefined;
   const stop = () => {
     stopped = true;
-    clearTimeout(timer);
+    unsubscribe();
+    detachAbort();
   };
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -18,30 +23,40 @@ export function GET(request: Request) {
         controller.close();
       };
       request.signal.addEventListener("abort", abort, { once: true });
+      detachAbort = () => request.signal.removeEventListener("abort", abort);
       if (request.signal.aborted) {
         abort();
         return;
       }
-      const poll = async () => {
+      const send = (sample: ClassroomSample) => {
+        if (stopped || (lastTime && sample.time <= lastTime)) return;
+        controller.enqueue(encoder.encode(`id: ${sample.time}\ndata: ${JSON.stringify(sample)}\n\n`));
+        lastTime = sample.time;
+      };
+      let ready = false;
+      const pending: ClassroomSample[] = [];
+      // Subscribe before the initial query so writes during that query cannot be lost.
+      unsubscribe = subscribe((sample) => {
+        if (ready) send(sample);
+        else pending.push(sample);
+      });
+      controller.enqueue(encoder.encode("retry: 2000\n\n"));
+      const initialize = async () => {
         try {
           const samples = await readSamples(lastTime);
           if (stopped) return;
-          for (const sample of samples) {
-            controller.enqueue(encoder.encode(`id: ${sample.time}\ndata: ${JSON.stringify(sample)}\n\n`));
-            lastTime = sample.time;
-          }
-          controller.enqueue(encoder.encode(": keep-alive\n\n"));
-          timer = setTimeout(poll, 1000);
+          for (const sample of [...samples, ...pending].sort((a, b) => a.time.localeCompare(b.time))) send(sample);
+          pending.length = 0;
+          ready = true;
         } catch (error) {
           console.error("Classroom stream failed:", error);
-          request.signal.removeEventListener("abort", abort);
           if (!stopped) {
             stop();
             controller.error(error);
           }
         }
       };
-      void poll();
+      void initialize();
     },
     cancel() {
       stop();

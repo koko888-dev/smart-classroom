@@ -1,5 +1,23 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Classroom simulation
+
+Start the app with `npm run dev`, then run `npm run generator` in a second terminal.
+Configure `INFLUX_URL`, `INFLUX_TOKEN`, `INFLUX_ORG`, and `INFLUX_BUCKET` in `.env.local`.
+The generator targets `http://localhost:3000`; set `CLASSROOM_APP_URL` if the app uses another address.
+
+The simulator produces a sample every five seconds. Environmental values move gradually,
+and occasional entry/exit events change occupancy by 1–3 people. This is a demo scenario,
+not a calibrated physical sensor model. After InfluxDB confirms each write, the generator
+posts that sample to the authenticated publish endpoint, which immediately forwards it
+to connected browsers through SSE. There is no periodic database polling. A browser
+reads stored data when it connects or reconnects, and deduplicates samples by timestamp.
+Failed notifications are retried on the next sample, with up to one hour of pending samples.
+
+The event subscribers live in one local Next.js process. Multiple server instances would
+need a shared message broker. Previously saved random data remains visible until it leaves
+the one-hour history window. Run `npm test` to check simulation continuity and bounds.
+
 ## Getting Started
 
 First, run the development server:

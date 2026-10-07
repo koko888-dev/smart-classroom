@@ -1,4 +1,5 @@
 const path = require("path");
+const { createSimulator } = require("./simulator");
 
 require("dotenv").config({
   path: path.resolve(__dirname, "../.env.local"),
@@ -26,40 +27,33 @@ const writeApi = influxDB.getWriteApi(
   { flushInterval: 0 }
 );
 
-function generateData() {
-  const temperature = Number(
-    (27 + Math.random() * 5).toFixed(1)
-  );
+const generateData = createSimulator();
+const publishUrl = new URL("/api/classroom/publish", process.env.CLASSROOM_APP_URL || "http://localhost:3000");
+const pending = [];
 
-  const humidity = Math.floor(
-    60 + Math.random() * 21
-  );
-
-  const co2 = Math.floor(
-    700 + Math.random() * 601
-  );
-
-  const people = Math.floor(
-    Math.random() * 51
-  );
-
-  return {
-    temperature,
-    humidity,
-    co2,
-    people,
-  };
+async function publishPending() {
+  while (pending.length) {
+    const response = await fetch(publishUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(pending[0]),
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!response.ok) throw new Error(`Publish failed: HTTP ${response.status}`);
+    pending.shift();
+  }
 }
 
 async function saveData() {
   try {
     const data = generateData();
+    const time = new Date();
 
     const point = new Point(
       "classroom_environment"
     )
       .tag("room", "ENG-301")
-      .timestamp(new Date())
+      .timestamp(time)
       .floatField(
         "temperature",
         data.temperature
@@ -81,6 +75,15 @@ async function saveData() {
 
     // บังคับส่งข้อมูลที่ buffer อยู่ไป InfluxDB
     await writeApi.flush();
+
+    // Publish only after the database confirms the write. Retry on the next sample.
+    pending.push({ ...data, room: "ENG-301", time: time.toISOString() });
+    if (pending.length > 720) pending.shift();
+    try {
+      await publishPending();
+    } catch (error) {
+      console.error("บันทึกแล้ว แต่ส่งเข้าเว็บไม่สำเร็จ จะลองใหม่รอบถัดไป:", error.message);
+    }
 
     console.log("บันทึกลง InfluxDB แล้ว:");
     console.log(
@@ -107,8 +110,11 @@ async function saveData() {
 
 // Wait for each write before scheduling another one, so slow writes cannot overlap.
 async function run() {
+  const started = Date.now();
   await saveData();
-  setTimeout(run, 5000);
+  setTimeout(run, Math.max(0, 5000 - (Date.now() - started)));
 }
 
-run();
+if (require.main === module) run();
+
+module.exports = { saveData, writeApi };

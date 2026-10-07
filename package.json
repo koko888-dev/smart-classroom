@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "generator": "node scripts/generator.js",
+    "test": "node --test tests/*.test.cjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

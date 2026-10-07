@@ -148,6 +148,7 @@ export default function Home() {
             <Tooltip labelFormatter={(label) => formatTime(String(label))} />
 
             <Line
+              isAnimationActive={false}
               type="monotone"
               dataKey="temperature"
             />
@@ -171,6 +172,7 @@ export default function Home() {
             <Tooltip labelFormatter={(label) => formatTime(String(label))} />
 
             <Line
+              isAnimationActive={false}
               type="monotone"
               dataKey="co2"
             />
@@ -194,6 +196,7 @@ export default function Home() {
             <Tooltip labelFormatter={(label) => formatTime(String(label))} />
 
             <Line
+              isAnimationActive={false}
               type="monotone"
               dataKey="people"
             />
